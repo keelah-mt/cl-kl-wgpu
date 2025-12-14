@@ -2,7 +2,10 @@
   :description "cl-kl-wgpu: FFI for wgpu-native"
   :version "0.0.1"
   :author "Kira Verhovyh <git@keelah.cc>"
-  :license "BSD-2"
+  :license "BSD 3 Clause"
+  :source-control (:git "git@github.com:keelah-mt/cl-kl-wgpu.git")
+  :long-description #.(uiop:read-file-string
+                       (uiop:subpathname *load-pathname* "README.md"))
   :defsystem-depends-on (#:cffi-grovel)
   :depends-on (#:cffi #:cffi-libffi #:blackbird #:cl-kl-glfw)
   :components ((:module "bindings"
