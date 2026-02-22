@@ -1,18 +1,13 @@
-(defpackage :cl-ky-wgpu/test
-  (:use #:cl #:wgpu)
-  (:nicknames :wgpu/test)
+(defpackage :cl-kl-wgpu
+  (:use #:cl)
+  (:nicknames :wgpu)
   (:local-nicknames (:window :glfw/window)
-                    (:input :glfw/input))
+                    (:input :glfw/input)
+                    (:%f :wgpu/ffi)
+                    (:%rp :wgpu/render-pipeline))
   (:export :my-pretty-triangle))
 
-(in-package :wgpu/test)
-
-(defun pprint-plist (plist &optional (stream t))
-  (format stream "~%~A~20,0T~A" "KEY" "PARAM")
-  (format stream "~%~A" (make-string 30 :initial-element #\-))
-  (loop for (key value) on plist by #'cddr do
-           (format stream "~%~A~20,0T~S" key value))
-  (terpri stream))
+(in-package :wgpu)
 
 (defun keyboard-handler (window key scan-code action mods)
   (declare (ignore scan-code mods))
@@ -20,6 +15,18 @@
   (when (eq key :glfw-key-escape)
     (window:window-close window))
   t)
+
+(defun get-x11-surface (wgpu window)
+  (let ((x11-display (glfw/window:get-x11-display))
+        (x11-window (glfw/window:window-get-x11 window)))
+    (wgpu/surface:with-surface-source-xlib (source x11-display x11-window)
+      (wgpu/surface:make-surface "x11-surface" wgpu source))))
+
+;; (defun get-wayland-surface (wgpu window)
+  ;; (let ((wl-display (glfw/window:get-wayland-display))
+        ;; (wl-surface (glfw/window:window-get-wayland window)))
+    ;; (wgpu/surface:with-surface-source-wayland (source wl-display wl-surface)
+      ;; (wgpu/surface:create wgpu source))))
 
 (defun test-loop ()
   (glfw:with-glfw (glfw-inst)
@@ -29,34 +36,81 @@
     (window:with-window (window
                          "hello" 600 600
                          '((:glfw-window-hint-client-api :glfw-api-no-api)))
-      (format t "WINDOW: ~S~%" window)
+      (format t "WINDOW: ~S, ~S~%" window (window:window-get-ptr window))
       (input:input-init)
       (flet ((keyboard-cb (&rest rest)
                (apply #'keyboard-handler (cons window rest))))
         (let ((keyboard (input:make-keyboard)))
           (input:keyboard-acquire keyboard (window:window-get-ptr window))
           (input:keyboard-push-handler keyboard #'keyboard-cb)
-          (with-wgpu (wgpu-instance)
-            (format t "WGPU: ~S, ptr: ~S~%" wgpu-instance (window:window-get-ptr window))
-            (let* ((surface (wgpu/surface:make-surface wgpu-instance window))
-                   (adapter (wgpu/adapter:make-adapter wgpu-instance surface))
-                   (device (wgpu/device:make-device adapter
-                                                    (wgpu/device:make-default-device-descriptor))))
+          (wgpu/instance:with-wgpu (wgpu)
+            (format t "WGPU: ~S, ptr: ~S~%" wgpu (window:window-get-ptr window))
+            (let* ((surface (get-x11-surface wgpu window))
+                   (adapter (wgpu/adapter:make-adapter "adapter" wgpu surface))
+                   (surface-caps (wgpu/surface:get-capabilities surface adapter))
+                   (device (wgpu/device:make-device "device" adapter
+                                                    (wgpu/device:make-device-descriptor "desc")))
+                   (queue (wgpu/queue:make-queue device "queue-1"))
+                   (shader-module
+                     (wgpu/shader-module:make-shader-module
+                      device
+                      (wgpu/shader-module:load-source-from-file
+                       "shader.wgsl" wgpu/shader-module:shader-language-wgsl)
+                      "mah-shader-module"))
+                   (pipeline-layout
+                     (wgpu/pipeline-layout:make-pipeline-layout
+                      "pl"
+                      device
+                      (wgpu/pipeline-layout:make-pipeline-layout-descriptor "desc")))
+                   (rp-desc (%rp:build-render-pipeline-descriptor
+                             :label "holy triangle"
+                             :layout pipeline-layout
+                             :vertex `(:module ,shader-module :entry-point "vs_main")
+                             :fragment `(:module ,shader-module
+                                         :entry-point "fs_main"
+                                         :targets ,(list (%rp:build-color-target-state
+                                                          :texture-format
+                                                          (first (wgpu/surface:texture-formats surface-caps)))))
+                             :primitive '(:topology :wgpu-primitive-topology-triangle-list)
+                             :multisample '(:count 1 :mask #xFFFFFFFF)))
+                   (render-pipeline (wgpu/render-pipeline:make-render-pipeline "pipeline"
+                                                                               device
+                                                                               rp-desc)))
+              (format t "SURFACE: ~S~%" surface)
+              (format t "SURFACE CAPS: ~S~%" surface-caps)
               (format t "ADAPTER: ~S~%" adapter)
-              (pprint-plist (wgpu/adapter:adapter-get-info adapter))
-
+              (format t "~A~%" (wgpu/adapter:get-info adapter))
               (format t "DEVICE: ~S~%" device)
+              (format t "QUEUE: ~S~%" queue)
+              (format t "SHADER-MODULE: ~S~%" shader-module)
+              (format t "PIPELINE-LAYOUT: ~A~%" pipeline-layout)
+              (format t "RENDER-PIPELINE: ~S~%" render-pipeline)
+              (wgpu/resource:release pipeline-layout)
+              (wgpu/resource:release shader-module)
+              (wgpu/resource:release queue)
+              (wgpu/resource:release device)
+              (wgpu/resource:release adapter)
+              (wgpu/resource:release surface))
+            ;; (let* ((surface (get-wayland-surface wgpu window))               
+            ;; (adapter (wgpu/adapter:make-adapter wgpu surface)))
+            ;; ;; (device (wgpu/device:make-device adapter
+            ;; ;; (wgpu/device:make-default-device-descriptor)))
+            ;; ;; (queue (wgpu/queue:make-queue device)))
+            ;; ;;)
+            ;; ;; (format t "DEVICE: ~S~%" device)
+            ;; ;; (format t "QUEUE: ~S~%" queue)
+            ;; ;;(do () ((window:window-close-p window))
+            ;; ;;  (glfw/%instance:wait-events))
 
-              (do () ((window:window-close-p window))
-                (glfw/%instance:wait-events))
-
-              (wgpu/device:device-release device)
-              (wgpu/adapter:adapter-release adapter)
-              (wgpu/surface:surface-release surface)))
-
-          (input:keyboard-release keyboard))
-        (input:input-deinit)
-        (format t "DONE~%")))))
+            ;; ;; (wgpu/%resource:release queue)
+            ;; ;; (wgpu/%resource:release device)
+            ;; (wgpu/%resource:release adapter)
+            ;; (wgpu/%resource:release surface))
+            )
+          
+          (input:keyboard-release keyboard)))
+              (input:input-deinit))
+        (format t "DONE~%")))
 
 (defun my-pretty-triangle ()
   (test-loop))
