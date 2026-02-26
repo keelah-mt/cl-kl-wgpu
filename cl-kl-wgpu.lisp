@@ -75,7 +75,9 @@
                              :multisample '(:count 1 :mask #xFFFFFFFF)))
                    (render-pipeline (wgpu/render-pipeline:make-render-pipeline "pipeline"
                                                                                device
-                                                                               rp-desc)))
+                                                                               rp-desc))
+                   (should-reconf-surface t)
+                   (fatal-surface-status nil))
               (format t "SURFACE: ~S~%" surface)
               (format t "SURFACE CAPS: ~S~%" surface-caps)
               (format t "ADAPTER: ~S~%" adapter)
@@ -85,28 +87,51 @@
               (format t "SHADER-MODULE: ~S~%" shader-module)
               (format t "PIPELINE-LAYOUT: ~A~%" pipeline-layout)
               (format t "RENDER-PIPELINE: ~S~%" render-pipeline)
+              ;;
+              (do () ((glfw/window:window-close-p window) fatal-surface-status)
+                (glfw/%instance:poll-events)
+
+                (when should-reconf-surface
+                  (progn
+                    (format t ">>> RECONFIGURE SURFACE~%")
+                    (multiple-value-bind (width height) (cl-kl-glfw/window:window-size window)
+                      (format t ">>> WINDOW SIZE: ~D, ~D~%" width height)
+                      (let ((conf (wgpu/surface:build-surface-configuration
+                                   :width width
+                                   :height height
+                                   :device device
+                                   :format (first (wgpu/surface:texture-formats surface-caps))
+                                   :usage %f:wgpu-texture-usage-render-attachment
+                                   :present-mode :wgpu-present-mode-fifo
+                                   :alpha-mode (first (wgpu/surface:alpha-modes surface-caps)))))
+                        (wgpu/surface:configure surface conf)
+                        (setf should-reconf-surface nil)))))
+
+                (wgpu/surface:with-current-texture texture status surface
+                  (format t ">>>> GOT SURFACE TEXTURE: ~S~%" status)
+                  (case status
+                    ((:wgpu-surface-get-current-texture-status-lost
+                      :wgpu-surface-get-current-texture-status-timeout
+                      :wgpu-surface-get-current-texture-status-outdated)
+                     (setf should-reconf-surface t))
+                    ((:wgpu-surface-get-current-texture-status-out-of-memory
+                      :wgpu-surface-get-current-texture-status-device-lost)
+                     (setf fatal-surface-status status)))
+
+                  (unless (or should-reconf-surface fatal-surface-status)
+                    (let ((frame (wgpu/texture:create-view texture nil)))
+                      (format t ">>> GOT TEXTURE VIEW: ~S~%" frame)
+                      (wgpu/resource:release frame)))))
+
+              ;;
+              (format t ">>> LOOP DONE[~S], RUN DEINIT~%" fatal-surface-status)
+
               (wgpu/resource:release pipeline-layout)
               (wgpu/resource:release shader-module)
               (wgpu/resource:release queue)
               (wgpu/resource:release device)
               (wgpu/resource:release adapter)
-              (wgpu/resource:release surface))
-            ;; (let* ((surface (get-wayland-surface wgpu window))               
-            ;; (adapter (wgpu/adapter:make-adapter wgpu surface)))
-            ;; ;; (device (wgpu/device:make-device adapter
-            ;; ;; (wgpu/device:make-default-device-descriptor)))
-            ;; ;; (queue (wgpu/queue:make-queue device)))
-            ;; ;;)
-            ;; ;; (format t "DEVICE: ~S~%" device)
-            ;; ;; (format t "QUEUE: ~S~%" queue)
-            ;; ;;(do () ((window:window-close-p window))
-            ;; ;;  (glfw/%instance:wait-events))
-
-            ;; ;; (wgpu/%resource:release queue)
-            ;; ;; (wgpu/%resource:release device)
-            ;; (wgpu/%resource:release adapter)
-            ;; (wgpu/%resource:release surface))
-            )
+              (wgpu/resource:release surface)))
           
           (input:keyboard-release keyboard)))
               (input:input-deinit))

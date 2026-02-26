@@ -4,7 +4,6 @@
   (:import-from #:alexandria
                 #:with-gensyms)
   (:import-from #:wgpu/%misc
-                #:def-enum-type
                 #:define-struct-builder) 
   (:local-nicknames (#:%r #:wgpu/resource)
                     (#:%f #:wgpu/ffi)
@@ -198,7 +197,7 @@
 (defmacro with-maybe-fragment-state-ptr (var state &body body)
   `(if (null ,state)
        (let ((,var (cffi:null-pointer))) ,@body)
-       (with-fragment-state ,var ,state)))
+       (with-fragment-state ,var ,state ,@body)))
 
 ;; TODO: incomplete
 (defmacro with-render-pipeline-descriptor (var descriptor &body body)

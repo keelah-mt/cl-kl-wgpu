@@ -6,17 +6,28 @@
                 #:define-constant)
   (:import-from #:wgpu/adapter
                 #:adapter)
+  (:import-from #:wgpu/device
+                #:device)
+  (:import-from #:wgpu/texture
+                #:texture
+                #:assign-texture)
   (:import-from #:wgpu/%misc
                 #:with-zero-object
-                #:make-status-error)
+                #:make-status-error
+                #:define-struct-builder)
   (:local-nicknames (#:%r #:wgpu/resource)
                     (#:%f #:wgpu/ffi)
+                    (#:%c #:wgpu/common)
                     (#:%cs #:wgpu/%chained-struct)
                     (#:%sv #:wgpu/%string-view))
   (:export
    :make-surface
    :release
+   :configure
+   :build-surface-configuration
    :get-capabilities
+   :get-current-texture
+   :with-current-texture
    :texture-usages
    :texture-formats
    :present-modes
@@ -55,24 +66,6 @@
         ,@body))))
 
 ;; -------------------- SURFACE CAPABILITIES -------
-
-(define-constant +wgpu-texture-usage-map+
-  `((,%f:wgpu-texture-usage-copy-src . :copy-src)
-    (,%f:wgpu-texture-usage-copy-dst . :copy-dst)
-    (,%f:wgpu-texture-usage-texture-binding . :texture-binding)
-    (,%f:wgpu-texture-usage-storage-binding . :storage-binding)
-    (,%f:wgpu-texture-usage-render-attachment . :render-attachment))
-  :test 'equal)
-
-(defun parse-wgpu-texture-usage (bitmask)
-  (if (zerop bitmask)
-      (list :none)
-      (reduce (lambda (acc entry)
-                (if (plusp (logand bitmask (car entry)))
-                    (append acc (list (cdr entry)))
-                    acc))
-              +wgpu-texture-usage-map+
-              :initial-value nil)))
 
 (defclass surface-capabilities ()
   ((texture-usages :reader texture-usages
@@ -117,7 +110,7 @@
                              %f:alpha-mode-count
                              %f:alpha-modes)
                             c-caps (:struct %f:wgpu-surface-capabilities))
-    (let ((usages (parse-wgpu-texture-usage %f:usages))
+    (let ((usages (%c:parse-wgpu-texture-usage %f:usages))
           (textures (cffi:foreign-array-to-lisp
                      %f:formats
                      `(:array %f:wgpu-texture-format ,%f:format-count)))
@@ -133,6 +126,20 @@
                      :present-modes (coerce p-modes 'list)
                      :alpha-modes (coerce a-modes 'list)))))
 
+;; -------------------- SURFACE CONFIGURATION ------
+
+(defstruct surface-configuration
+  (device nil :type device)
+  (format :wgpu-texture-format-undefined :type %c:texture-format)
+  (usage %f:wgpu-texture-usage-none :type integer)
+  (width 0 :type integer)
+  (height 0 :type integer)
+  (view-formats nil :type list)
+  (alpha-mode :wgpu-composite-alpha-mode-auto :type %c:composite-alpha-mode)
+  (present-mode :wgpu-present-mode-undefined :type %c:present-mode))
+
+(define-struct-builder build-surface-configuration 'surface-configuration)
+
 ;; -------------------- SURFACE --------------------
 
 (defmacro with-surface-descriptor ((descriptor source &key label) &body body)
@@ -144,6 +151,35 @@
       (%sv:with-string-view ,str-view ,label
         (setf ,nin ,source
               ,l ,str-view)
+        ,@body))))
+
+;; TODO: view formats
+(defmacro with-surface-configuration (var configuration &body body)
+  (with-gensyms (nin de ft ue wh ht vf vfc am pm)
+    `(uiop:nest
+      (cffi:with-foreign-object (,var '%f:wgpu-surface-configuration))
+      (cffi:with-foreign-slots (((,nin %f:next-in-chain)
+                                 (,de %f:device)
+                                 (,ft %f:format)
+                                 (,ue %f:usage)
+                                 (,wh %f:width)
+                                 (,ht %f:height)
+                                 (,vf %f:view-formats)
+                                 (,vfc %f:view-format-count)
+                                 (,am %f:alpha-mode)
+                                 (,pm %f:present-mode))
+                                ,var %f:wgpu-surface-configuration)
+        (setf ,nin (cffi:null-pointer)
+              ,de (%r:handle (surface-configuration-device ,configuration))
+              ,ft (surface-configuration-format ,configuration)
+              ,ue (surface-configuration-usage ,configuration)
+              ,wh (surface-configuration-width ,configuration)
+              ,ht (surface-configuration-height ,configuration)
+              ;; TODO
+              ,vf (cffi:null-pointer)
+              ,vfc 0
+              ,am (surface-configuration-alpha-mode ,configuration)
+              ,pm (surface-configuration-present-mode ,configuration))
         ,@body))))
 
 (defclass surface (%r:resource) ())
@@ -170,3 +206,26 @@
           (error (make-status-error (%r:name s)
                                     (symbol-name '%f:wgpu-surface-get-capabilities)
                                     status))))))
+
+;; TODO: needs error scope
+(defmethod configure ((value surface) configuration)
+  (with-surface-configuration c-conf configuration
+    (%f:wgpu-surface-configure (%r:handle value) c-conf)))
+
+(defmethod get-current-texture ((value surface))
+  (declare (values (or texture null) %c:surface-texture-status))
+  (with-zero-object (texture-data '%f:wgpu-surface-texture)
+    (cffi:with-foreign-slots ((%f:texture %f:status)
+                              texture-data %f:wgpu-surface-texture)
+      (cl-kl-wgpu/ffi:wgpu-surface-get-current-texture (%r:handle value) texture-data)
+      (if (cffi:null-pointer-p %f:texture)
+          (values nil %f:status)
+          (values (assign-texture (format nil "~A:texture" (%r:name value)) %f:texture)
+                  %f:status)))))
+
+(defmacro with-current-texture (texture status surface &body body)
+  `(multiple-value-bind (,texture ,status) (get-current-texture ,surface)
+     (unwind-protect ,@body
+       (when ,texture
+         (%r:release ,texture)))))
+
