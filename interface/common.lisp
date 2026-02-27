@@ -11,6 +11,8 @@
    :composite-alpha-mode
    :blend-operation
    :blend-factor
+   :load-op
+   :store-op
    :compare-function
    :optional-bool
    :texture-format
@@ -39,6 +41,8 @@
 (def-enum-type %f:wgpu-front-face front-face)
 (def-enum-type %f:wgpu-cull-mode cull-mode)
 (def-enum-type %f:wgpu-surface-get-current-texture-status surface-texture-status)
+(def-enum-type %f:wgpu-load-op load-op)
+(def-enum-type %f:wgpu-store-op store-op)
 
 (define-constant +wgpu-texture-usage-map+
     `((,%f:wgpu-texture-usage-copy-src . :copy-src)

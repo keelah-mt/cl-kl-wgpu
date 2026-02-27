@@ -28,6 +28,7 @@
    :get-capabilities
    :get-current-texture
    :with-current-texture
+   :present
    :texture-usages
    :texture-formats
    :present-modes
@@ -229,3 +230,5 @@
        (when ,texture
          (%r:release ,texture)))))
 
+(defmethod present ((surface surface))
+  (%f:wgpu-surface-present (%r:handle surface)))

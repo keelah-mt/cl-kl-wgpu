@@ -5,16 +5,14 @@
   (:import-from #:alexandria
                 #:define-constant
                 #:with-gensyms)
+  (:import-from #:wgpu/%misc
+                #:wgpu-strlen)
   (:export
    :with-string-view
    :with-351-workaround
    :get-l-string))
 
 (in-package :wgpu/%string-view)
-
-;; TODO: cheating, c2ffi can extract this, but it comes in a separate file...
-;; and the format doesn't respect the selected driver. might be easier to use grovel
-(define-constant wgpu-strlen #xFFFFFFFFFFFFFFFF :test #'=)
 
 ;; unfortunately we need to track ownership of string-view strings:
 ;; 1. We create some ourselves, these are easy - we free them

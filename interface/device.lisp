@@ -7,11 +7,13 @@
   (:local-nicknames (#:%r #:wgpu/resource)
                     (#:%f #:wgpu/ffi)
                     (#:%cc #:wgpu/%cb-context)
-                    (#:%sv #:wgpu/%string-view))
+                    (#:%sv #:wgpu/%string-view)
+                    (#:%ce #:wgpu/command-encoder))
   (:export
    :make-device-descriptor
    :device
-   :make-device))
+   :make-device
+   :create-command-encoder))
 
 (in-package :wgpu/device)
 
@@ -32,7 +34,7 @@
           (,user-data-1 :pointer)
           (,user-data-2 :pointer))
        (%sv:with-351-workaround ,message-view ,message-view-1 ,message-view-2
-           ,@body))))
+         ,@body))))
 
 (defmacro make-uncaptured-error-callback (name (device
                                                 error-type
@@ -265,3 +267,10 @@
     (remove-cb-handler lost-cb-id 'lost)
     (remove-cb-handler uncaptured-cb-id 'uncaptured))
   (%f:wgpu-device-release (%r:handle d)))
+
+;; TODO: how does this fail?
+(defmethod create-command-encoder ((value device) label)
+  (declare (type string label))
+  (%ce:with-command-encoder-descriptor c-desc label
+    (let ((result (%f:wgpu-device-create-command-encoder (%r:handle value) c-desc)))
+      (%ce:assign-command-encoder label result))))

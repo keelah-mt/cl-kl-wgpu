@@ -4,7 +4,9 @@
   (:local-nicknames (:window :glfw/window)
                     (:input :glfw/input)
                     (:%f :wgpu/ffi)
-                    (:%rp :wgpu/render-pipeline))
+                    (:%rp :wgpu/render-pipeline)
+                    (:%ce :wgpu/command-encoder)
+                    (:%rpe :wgpu/render-pass-encoder))
   (:export :my-pretty-triangle))
 
 (in-package :wgpu)
@@ -95,7 +97,6 @@
                   (progn
                     (format t ">>> RECONFIGURE SURFACE~%")
                     (multiple-value-bind (width height) (cl-kl-glfw/window:window-size window)
-                      (format t ">>> WINDOW SIZE: ~D, ~D~%" width height)
                       (let ((conf (wgpu/surface:build-surface-configuration
                                    :width width
                                    :height height
@@ -108,7 +109,6 @@
                         (setf should-reconf-surface nil)))))
 
                 (wgpu/surface:with-current-texture texture status surface
-                  (format t ">>>> GOT SURFACE TEXTURE: ~S~%" status)
                   (case status
                     ((:wgpu-surface-get-current-texture-status-lost
                       :wgpu-surface-get-current-texture-status-timeout
@@ -119,8 +119,34 @@
                      (setf fatal-surface-status status)))
 
                   (unless (or should-reconf-surface fatal-surface-status)
-                    (let ((frame (wgpu/texture:create-view texture nil)))
-                      (format t ">>> GOT TEXTURE VIEW: ~S~%" frame)
+                    (let* ((frame (wgpu/texture:create-view texture nil))
+                           (command-encoder (wgpu/device:create-command-encoder device
+                                                                                "encoder"))
+                           (pass-desc (%ce:build-render-pass-descriptor
+                                          :label "render-pass-encoder"
+                                          :color-attachments
+                                          (list (%ce:build-render-pass-color-attachment
+                                                 :view frame
+                                                 :load-op :wgpu-load-op-clear
+                                                 :store-op :wgpu-store-op-store
+                                                 :clear-value (wgpu/color:build-color
+                                                               :r 0.0d0
+                                                               :g 1.0d0
+                                                               :b 0.0d0
+                                                               :a 1.0d0)))))
+                           (pass-encoder (%ce:begin-render-pass command-encoder pass-desc)))
+                      
+                      (%rpe:set-pipeline pass-encoder render-pipeline)
+                      (%rpe:draw pass-encoder 3 1 0 0)
+                      (%rpe:end pass-encoder)
+                      (wgpu/resource:release pass-encoder)
+
+                      (let ((command-buffer (%ce:finish command-encoder "command-buffer")))
+                        (wgpu/queue:submit queue (list command-buffer))
+                        (wgpu/surface:present surface)
+                        (wgpu/resource:release command-buffer))
+
+                      (wgpu/resource:release command-encoder)
                       (wgpu/resource:release frame)))))
 
               ;;

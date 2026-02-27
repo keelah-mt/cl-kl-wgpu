@@ -13,6 +13,7 @@
   (:export
    :texture
    :assign-texture
+   :texture-view
    :create-view))
 
 (in-package :wgpu/texture)

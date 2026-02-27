@@ -3,8 +3,11 @@
   (:use #:cl)
   (:import-from #:alexandria
                 #:with-gensyms
-                #:format-symbol)
+                #:format-symbol
+                #:define-constant)
   (:export
+   :wgpu-strlen
+   :wgpu-depth-slice-undefined
    :with-zero-object
    :def-enum-type
    :build-struct
@@ -12,6 +15,11 @@
    :make-status-error))
 
 (in-package :wgpu/%misc)
+
+;; TODO: cheating, c2ffi can extract this, but it comes in a separate file...
+;; and the format doesn't respect the selected driver. might be easier to use grovel
+(define-constant wgpu-strlen #xFFFFFFFFFFFFFFFF :test #'=)
+(define-constant wgpu-depth-slice-undefined #xFFFFFFFF :test #'=)
 
 (defmacro with-zero-object ((var type) &body body)
   (with-gensyms (i size)

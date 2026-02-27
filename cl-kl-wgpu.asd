@@ -14,16 +14,19 @@
     :components
     ((:file "callback-context")
      (:file "chained-struct")
+     (:file "misc")
      (:file "string-view")
-     (:file "misc")))
+     (:file "color")))
    (:module "interface"
     :components
     ((:file "common")
      (:file "resource")
      (:file "instance")
      (:file "adapter")
-     (:file "device")
      (:file "texture")
+     (:file "render-pass-encoder")
+     (:file "command-encoder")
+     (:file "device")
      (:file "surface")
      (:file "queue")
      (:file "shader-module")

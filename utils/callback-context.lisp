@@ -128,16 +128,12 @@
                                 ,user-data-1
                                 ,status-check))))
 
-(defmacro stuff (info callback-mode)
-  (when callback-mode info))
-
 (defmacro with-callback-info ((info info-type callback handle &key callback-mode) &body body)
   (with-gensyms (info-ptr nin cb ud1 ud2)
     (let ((set-mode (unless (eq :unsupported callback-mode)
                       `(setf (cffi:foreign-slot-value ,info-ptr '(:struct ,info-type) '%f:mode)
                              (or ,callback-mode :wgpu-callback-mode-allow-spontaneous)))))
       `(cffi:with-foreign-object (,info-ptr '(:struct ,info-type))
-         ;; TODO: a bit hackish way to figure out if mode is supported
          (cffi:with-foreign-slots (((,nin %f:next-in-chain)
                                     (,cb %f:callback)
                                     (,ud1 %f:userdata1)
@@ -148,11 +144,8 @@
                  ,ud1 (cffi:make-pointer ,handle)
                  ,ud2 (cffi:null-pointer))
            ,set-mode
-           ;; (let ((,info (cffi:mem-ref ,info-ptr '(:struct ,info-type))))
-           ;;   ,@body)
            (let ((,info ,info-ptr))
-             ,@body)
-           )))))
+             ,@body))))))
 
 ;; -------------------- PROMISE HELPERS --------------------
 

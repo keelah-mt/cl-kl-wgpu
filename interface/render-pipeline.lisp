@@ -89,7 +89,7 @@
 
 ;; TODO: handle constants
 (defmacro with-fragment-state (var state &body body)
-  (with-gensyms (entry-str nin sm ep c cc ts tsc targets target-count)
+  (with-gensyms (entry-str nin sm ep c cc ts tsc targets target-count c-targets)
     `(let* ((,targets (coerce (fragment-state-targets ,state) 'vector))
             (,target-count (length ,targets)))
        (uiop:nest
@@ -102,7 +102,7 @@
                                    (,ts %f:targets)
                                    (,tsc %f:target-count))
                                   ,var (:struct %f:wgpu-fragment-state)))
-        (cffi:with-foreign-array (,ts
+        (cffi:with-foreign-array (,c-targets
                                   ,targets
                                   `(:array (:struct %f:wgpu-color-target-state) ,,target-count)))
         (%sv:with-string-view ,entry-str (fragment-state-entry-point ,state)
@@ -111,6 +111,7 @@
                 ,ep ,entry-str
                 ,cc 0
                 ,c (cffi:null-pointer)
+                ,ts ,c-targets
                 ,tsc ,target-count)
           ,@body)))))
 
